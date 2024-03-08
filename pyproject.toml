@@ -1,0 +1,19 @@
+[project]
+name = "pytrale"
+version = "0.1.0"
+description = "Python package to analyze weights exported from trale"
+authors = [
+    {name = "braniii", email = "''"},
+]
+dependencies = []
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+distribution = true

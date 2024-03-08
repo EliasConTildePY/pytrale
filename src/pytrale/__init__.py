@@ -1,1 +1,1 @@
-from weights import Trale
+from .weightsDatabase import Trale

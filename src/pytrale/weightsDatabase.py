@@ -68,6 +68,10 @@ class Trale(DefaultDataClass):
                 _weights[idx] = np.mean(self.weights_measured[idx_measurements])
         return _weights
 
+    @cached_property
+    def weights_linear_interpol(self) -> NDArray:
+        return interpolate(self.weights)
+
     @classmethod
     def fromFile(cls, filename, **kwargs):
         measurements = load_backup(filename)

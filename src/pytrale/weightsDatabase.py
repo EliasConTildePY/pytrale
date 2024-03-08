@@ -54,8 +54,8 @@ class Trale(DefaultDataClass):
     @cached_property
     def times(self) -> NDArray:
         return np.arange(
-            np.floor(self.times_measured.min()),
-            np.floor(self.times_measured.max()) + 1,
+            np.floor(self.times_measured.min()) - self.extrapolation_range,
+            np.floor(self.times_measured.max()) + self.extrapolation_range + 1 ,
         )
 
     @cached_property
@@ -71,6 +71,21 @@ class Trale(DefaultDataClass):
     @cached_property
     def weights_linear_interpol(self) -> NDArray:
         return interpolate(self.weights)
+
+    @cached_property
+    def is_measurement(self) -> NDArray:
+        return (self.weights > 0).astype(int)
+
+    @cached_property
+    def is_interpolation(self) -> NDArray:
+        return 1 - self.is_measurement
+
+    @cached_property
+    def is_extrapolation(self) -> NDArray:
+        _is_extrapolation = np.zeros_like(self.times)
+        _is_extrapolation[:self.extrapolation_range] = 1
+        _is_extrapolation[-self.extrapolation_range:] = 1
+        return _is_extrapolation
 
     @classmethod
     def fromFile(cls, filename, **kwargs):

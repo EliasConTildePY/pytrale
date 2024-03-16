@@ -26,7 +26,7 @@ def interpolate(weights):
             - y, 1d numpy array with possible NaNs
         Output:
             - zeros, logical indices of NaNs
-            - index, a function, with signature indices= index(logical_indices),
+            - index, a function, with signature indices=index(logical_indices),
               to convert logical indices of NaNs to 'equivalent' indices
         Example:
             >>> # linear interpolation of NaNs
@@ -65,7 +65,7 @@ class Trale(DefaultDataClass):
 
         return np.arange(
             np.floor(self.times_measured.min()) - self.extrapolation_range,
-            np.floor(self.times_measured.max()) + self.extrapolation_range + 1 ,
+            np.floor(self.times_measured.max()) + self.extrapolation_range + 1,
         )
 
     @cached_property
@@ -73,9 +73,13 @@ class Trale(DefaultDataClass):
         _weights = np.zeros_like(self.times)
 
         for idx, time in enumerate(self.times):
-            idx_measurements = np.abs(np.floor(self.times_measured) - time) < 0.1
+            idx_measurements = np.abs(
+                np.floor(self.times_measured) - time
+            ) < 0.1
             if np.any(idx_measurements):
-                _weights[idx] = np.mean(self.weights_measured[idx_measurements])
+                _weights[idx] = np.mean(
+                    self.weights_measured[idx_measurements],
+                )
         return _weights
 
     @cached_property
@@ -112,15 +116,19 @@ class Trale(DefaultDataClass):
 
     @cached_property
     def is_extrapolation(self) -> NDArray:
-        _is_extrapolation = np.zeros_like(self.times)
+        _is_extrapolation = np.zeros_like(self.times, dtype=int)
         _is_extrapolation[:self.extrapolation_range] = 1
         _is_extrapolation[-self.extrapolation_range:] = 1
         return _is_extrapolation
+    
+    @cached_property
+    def is_no_extrapolation(self) -> NDArray:
+        return 1 - self.is_extrapolation
 
     @cached_property
     def sigma(self) -> NDArray:
         return (
-            self.is_measurement * self.interpol_strength_measurement + 
+            self.is_measurement * self.interpol_strength_measurement +
             self.is_no_measurement * self.interpol_strength_interpol
         )
 
@@ -132,7 +140,11 @@ class Trale(DefaultDataClass):
         ) * (
             self.is_measurement * self.interpol_weight + self.is_no_measurement
         )
-        return gaussian_weights / gaussian_weights[ms > 0].sum()
+        return np.where(
+            ms > 0,
+            gaussian_weights / gaussian_weights[ms > 0].sum(),
+            0,
+        )
 
     def _gaussian_mean(self, t: float, ms: NDArray) -> float:
         return np.dot(self._gaussian_weights(t, ms), ms)
@@ -163,17 +175,18 @@ class Trale(DefaultDataClass):
         return weights_extrapol
 
     def _linear_interpolation(self, weights: NDArray) -> NDArray:
-        return interpolate(weights)
+        return interpolate(weights) * self.is_no_extrapolation
 
     def _linear_regression(
         self, weights: NDArray, t_ref: float, times: NDArray
     ) -> NDArray:
-        mean_weight = self._gaussian_mean(t_ref, weights)
-        mean_time = self._gaussian_mean(t_ref, self.times)
-        mean_change = self._gaussian_mean(
-            t_ref, (weights - mean_weight) * self.times
-        ) / self._gaussian_mean(
-            t_ref, (self.times - mean_time) * self.times
+        gs_weights = self._gaussian_weights(t_ref, weights)
+        mean_weight = np.dot(gs_weights, weights)
+        mean_time = np.dot(gs_weights, self.times)
+        mean_change = np.dot(
+            gs_weights, (weights - mean_weight) * self.times
+        ) / np.dot(
+            gs_weights, (self.times - mean_time) * self.times
         )
 
         intercept = mean_weight - mean_change * mean_time

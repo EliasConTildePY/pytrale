@@ -9,6 +9,7 @@ dependencies = [
     "matplotlib>=3.8.3",
     "prettypyplot>=0.10.1",
     "numpy>=1.26.4",
+    "tqdm>=4.67.1",
 ]
 requires-python = ">=3.11"
 readme = "README.md"

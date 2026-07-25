@@ -13,10 +13,12 @@ from pytrale.utils.baseclass import DefaultDataClass
 def load_backup(filename: str) -> list:
     def parse_line(date, weight):
         return parser.parse(date), float(weight)
+
     with open(filename) as reader:
         return [
             parse_line(*line.split())
-            for line in reader.readlines() if not line.startswith('#')
+            for line in reader.readlines()
+            if not line.startswith("#")
         ]
 
 
@@ -56,9 +58,7 @@ class Trale(DefaultDataClass):
         _weights = np.zeros_like(self.times)
 
         for idx, time in enumerate(self.times):
-            idx_measurements = np.abs(
-                np.floor(self.times_measured) - time
-            ) < 0.1
+            idx_measurements = np.abs(np.floor(self.times_measured) - time) < 0.1
             if np.any(idx_measurements):
                 _weights[idx] = np.mean(
                     self.weights_measured[idx_measurements],
@@ -76,8 +76,8 @@ class Trale(DefaultDataClass):
     @cached_property
     def is_extrapolation(self) -> NDArray:
         _is_extrapolation = np.zeros_like(self.times, dtype=int)
-        _is_extrapolation[:self.extrapolation_range] = 1
-        _is_extrapolation[-self.extrapolation_range:] = 1
+        _is_extrapolation[: self.extrapolation_range] = 1
+        _is_extrapolation[-self.extrapolation_range :] = 1
         return _is_extrapolation
 
     @cached_property
@@ -109,9 +109,7 @@ class Trale(DefaultDataClass):
     @classmethod
     def fromFile(cls, filename, **kwargs):
         measurements = load_backup(filename)
-        times = np.array([
-            time.timestamp() / (24 * 3600) for time, _ in measurements
-        ])
+        times = np.array([time.timestamp() / (24 * 3600) for time, _ in measurements])
         weights = np.array([weight for _, weight in measurements])
 
         return cls(

@@ -74,8 +74,8 @@ def test_custom_algorithm_is_used_instead_of_default():
         algorithm=LinearInterpolator(),
     )
 
-    expected = LinearInterpolator().fit(times_measured, weights_measured).predict(
-        db.times
+    expected = (
+        LinearInterpolator().fit(times_measured, weights_measured).predict(db.times)
     )
     np.testing.assert_allclose(db.weights_predicted, expected)
 
@@ -89,11 +89,7 @@ def test_single_measurement_does_not_raise():
 
 def test_from_file(tmp_path):
     backup = tmp_path / "backup.txt"
-    backup.write_text(
-        "# comment line\n"
-        "2024-01-01 70.0\n"
-        "2024-01-02 70.5\n"
-    )
+    backup.write_text("# comment line\n2024-01-01 70.0\n2024-01-02 70.5\n")
 
     db = Trale.fromFile(str(backup))
 

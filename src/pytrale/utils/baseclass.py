@@ -7,7 +7,7 @@ class DefaultDataClass:
         # a frozen dataclass, so bypass __setattr__ via object.__setattr__.
         for field in fields(self):
             if (
-                not isinstance(field.default, _MISSING_TYPE) and
-                getattr(self, field.name) is None
+                not isinstance(field.default, _MISSING_TYPE)
+                and getattr(self, field.name) is None
             ):
                 object.__setattr__(self, field.name, field.default)

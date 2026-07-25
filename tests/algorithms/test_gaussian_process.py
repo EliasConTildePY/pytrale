@@ -6,8 +6,8 @@ from pytrale.algorithms.gaussian_process import GaussianProcess
 def _fitted_model():
     rng = np.random.default_rng(0)
     times_measured = np.arange(0, 60, 7, dtype=float)
-    weights_measured = 70 + 0.05 * times_measured + rng.normal(
-        scale=0.1, size=times_measured.shape
+    weights_measured = (
+        70 + 0.05 * times_measured + rng.normal(scale=0.1, size=times_measured.shape)
     )
     model = GaussianProcess(
         trend_length_scale=30,

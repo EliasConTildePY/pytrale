@@ -90,9 +90,12 @@ class GaussianKernelSmoother(Interpolator):
             + self._is_no_measurement * self.interpol_strength_interpol
         )
 
-        self.smoothed_ = self._gaussian_interpolation(
-            self._linear_extrapolation(self._linear_interpolation(weights)),
-        ) * self._is_measurement
+        self.smoothed_ = (
+            self._gaussian_interpolation(
+                self._linear_extrapolation(self._linear_interpolation(weights)),
+            )
+            * self._is_measurement
+        )
         self.linear_extrapolated_ = self._linear_extrapolation(
             self._linear_interpolation(self.smoothed_),
         )
@@ -110,12 +113,11 @@ class GaussianKernelSmoother(Interpolator):
         return np.interp(times, self._times, self.gaussian_extrapolated_)
 
     def _gaussian_weights(self, t: float, ms: NDArray) -> NDArray:
-        gaussian_weights = 1 / (
-            self._sigma * np.sqrt(2 * np.pi)
-        ) * np.exp(
-            -1 * (self._times - t) ** 2 / (2 * self._sigma ** 2)
-        ) * (
-            self._is_measurement * self.interpol_weight + self._is_no_measurement
+        gaussian_weights = (
+            1
+            / (self._sigma * np.sqrt(2 * np.pi))
+            * np.exp(-1 * (self._times - t) ** 2 / (2 * self._sigma**2))
+            * (self._is_measurement * self.interpol_weight + self._is_no_measurement)
         )
         return np.where(
             ms > 0,
@@ -127,10 +129,12 @@ class GaussianKernelSmoother(Interpolator):
         return np.dot(self._gaussian_weights(t, ms), ms)
 
     def _gaussian_interpolation(self, weights: NDArray) -> NDArray:
-        return np.array([
-            self._gaussian_mean(t, weights) if weights[idx] else 0
-            for idx, t in enumerate(self._times)
-        ])
+        return np.array(
+            [
+                self._gaussian_mean(t, weights) if weights[idx] else 0
+                for idx, t in enumerate(self._times)
+            ]
+        )
 
     def _linear_extrapolation(self, weights: NDArray) -> NDArray:
         if self._n_measurements == 1:
@@ -165,9 +169,7 @@ class GaussianKernelSmoother(Interpolator):
         mean_time = np.dot(gs_weights, self._times)
         mean_change = np.dot(
             gs_weights, (weights - mean_weight) * self._times
-        ) / np.dot(
-            gs_weights, (self._times - mean_time) * self._times
-        )
+        ) / np.dot(gs_weights, (self._times - mean_time) * self._times)
 
         intercept = mean_weight - mean_change * mean_time
         return mean_change * times + intercept

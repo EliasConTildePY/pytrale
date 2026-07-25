@@ -28,13 +28,13 @@ import numpy as np
 from pytrale import Trale
 
 db = Trale(
-    times_measured=np.array([0, 1, 3, 4, 8, 9, 10]),      # days
+    times_measured=np.array([0, 1, 3, 4, 8, 9, 10]),  # days
     weights_measured=np.array([70.2, 70.0, 69.8, 70.1, 69.5, 69.6, 69.4]),  # kg
 )
 
-db.times              # daily grid, padded by `extrapolation_range` on each side
-db.weights_predicted   # smoothed/interpolated/extrapolated weight on that grid
-db.is_measurement      # 1 where a real measurement exists on that day, else 0
+db.times  # daily grid, padded by `extrapolation_range` on each side
+db.weights_predicted  # smoothed/interpolated/extrapolated weight on that grid
+db.is_measurement  # 1 where a real measurement exists on that day, else 0
 ```
 
 Load directly from a trale export file instead of passing arrays by hand:
@@ -70,6 +70,7 @@ Subclass `pytrale.algorithms.Interpolator` and implement `fit`/`predict`:
 ```python
 from pytrale.algorithms import Interpolator
 
+
 class MyAlgorithm(Interpolator):
     def fit(self, times_measured, weights_measured):
         # store whatever your algorithm needs from the sparse measurements
@@ -78,6 +79,7 @@ class MyAlgorithm(Interpolator):
     def predict(self, times):
         # return an estimated weight for each entry in `times`
         ...
+
 
 db = Trale(times_measured=..., weights_measured=..., algorithm=MyAlgorithm())
 ```

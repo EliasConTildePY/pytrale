@@ -1,13 +1,13 @@
-from abc import ABC
-from dataclasses import fields, _MISSING_TYPE
+from dataclasses import _MISSING_TYPE, fields
 
 
-class DefaultDataClass(ABC):
+class DefaultDataClass:
     def __post_init__(self):
-        # Loop through the fields to fill default values
+        # Loop through the fields to fill default values. Fields may live on
+        # a frozen dataclass, so bypass __setattr__ via object.__setattr__.
         for field in fields(self):
             if (
-                not isinstance(field.default, _MISSING_TYPE) and
-                getattr(self, field.name) is None
+                not isinstance(field.default, _MISSING_TYPE)
+                and getattr(self, field.name) is None
             ):
-                setattr(self, field.name, field.default)
+                object.__setattr__(self, field.name, field.default)

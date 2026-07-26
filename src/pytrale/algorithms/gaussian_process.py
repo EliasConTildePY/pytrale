@@ -1,9 +1,20 @@
 import numpy as np
-
+from numpy.typing import NDArray
 from tqdm import tqdm
 
+from pytrale.algorithms.base import Interpolator
 
-class GaussianProcess:
+
+class GaussianProcess(Interpolator):
+    """Gaussian Process regression with a trend + weekly/monthly/annual kernel.
+
+    A from-scratch GP implementation (no scikit-learn dependency) intended as
+    a second reference algorithm alongside `GaussianKernelSmoother`, showing
+    that an `Interpolator` can be backed by a genuinely different model.
+    `predict` returns the posterior mean only, to satisfy the `Interpolator`
+    contract; use `predict_with_uncertainty` for mean and variance.
+    """
+
     def __init__(
         self,
         trend_length_scale=1.0,
@@ -16,9 +27,6 @@ class GaussianProcess:
         annual_signal_variance=1.0,
         noise_variance=1e-8,
     ):
-        """
-        Gaussian Process Regression with a combined kernel.
-        """
         self.trend_length_scale = trend_length_scale
         self.trend_signal_variance = trend_signal_variance
 
@@ -78,21 +86,30 @@ class GaussianProcess:
 
         return K_trend + K_weekly + K_monthly + K_annual
 
-    def fit(self, X_train, y_train):
+    def fit(
+        self, times_measured: NDArray, weights_measured: NDArray
+    ) -> "GaussianProcess":
         """
-        Fit the Gaussian Process by computing and storing the inverse covariance matrix.
+        Fit the Gaussian Process by computing and storing the inverse
+        covariance matrix.
         """
-        self.X_train = self._prepare_X(X_train)
-        self.y_train = np.atleast_1d(y_train)
+        self.X_train = self._prepare_X(times_measured)
+        self.y_train = np.atleast_1d(weights_measured)
         K = self.kernel(self.X_train, self.X_train)
         K += self.noise_variance * np.eye(self.X_train.shape[0])
         self.K_inv = np.linalg.inv(K)
+        return self
 
-    def predict(self, X_test, full_cov=False):
+    def predict(self, times: NDArray) -> NDArray:
+        mean, _ = self.predict_with_uncertainty(times)
+        return mean
+
+    def predict_with_uncertainty(self, X_test, full_cov=False):
         """
         Predict the mean and variance at test points.
 
-        If full_cov is False, compute only the diagonal of the predictive covariance efficiently.
+        If full_cov is False, compute only the diagonal of the predictive
+        covariance efficiently.
 
         :param X_test: Test input data (1D or 2D array).
         :param full_cov: If True, compute the full covariance matrix.
@@ -171,8 +188,9 @@ class GaussianProcess:
         n_restarts=5,
     ):
         """
-        Optimize all hyperparameters in log-space using gradient ascent with random restarts.
-        This version updates the GP object immediately with the changed parameter values.
+        Optimize all hyperparameters in log-space using gradient ascent with
+        random restarts. This version updates the GP object immediately with
+        the changed parameter values.
         """
         X_train = self._prepare_X(X_train)
         y_train = np.atleast_1d(y_train)
@@ -190,8 +208,8 @@ class GaussianProcess:
         best_lml = -np.inf
         best_log_params = None
 
-        pb = tqdm(n_restarts * n_iters, desc="Optimizing hyperparameters")
-        for restart in range(n_restarts):
+        pb = tqdm(range(n_restarts * n_iters), desc="Optimizing hyperparameters")
+        for _restart in range(n_restarts):
             # Start with current log parameters and add a small random perturbation.
             log_params = self.get_log_params()
             for key in params_to_optimize:
@@ -199,7 +217,7 @@ class GaussianProcess:
 
             # Set the current parameters into the object
             self.set_params_from_log(log_params)
-            for it in range(n_iters):
+            for _it in range(n_iters):
                 grads = {}
                 # Update object's parameters from the current log_params.
                 self.set_params_from_log(log_params)
@@ -228,7 +246,7 @@ class GaussianProcess:
                     grad = (lml_plus - lml_minus) / (2 * epsilon)
                     grads[param] = grad
 
-                # Update log_params and immediately set the new params into the GP object.
+                # Update log_params and immediately set the new params on the GP.
                 for param in params_to_optimize:
                     log_params[param] += learning_rate * grads[param]
                 self.set_params_from_log(log_params)
@@ -252,43 +270,4 @@ class GaussianProcess:
 
         if best_log_params is not None:
             self.set_params_from_log(best_log_params)
-        print("Best LML achieved:", best_lml)
-
-
-if __name__ == "__main__":
-    np.random.seed(0)
-    # Synthetic training data: weekly measurements over one year.
-    X_train = np.arange(0, 365, 7).reshape(-1, 1)
-    y_train = (
-        70
-        + 0.01 * X_train.ravel()
-        + 2 * np.sin(2 * np.pi * X_train.ravel() / 365)
-        + 0.5 * np.random.randn(X_train.shape[0])
-    )
-
-    # Initialize the GP with some starting hyperparameters.
-    gp = GaussianProcess(
-        trend_length_scale=50,
-        trend_signal_variance=1.0,
-        weekly_length_scale=1.0,
-        weekly_signal_variance=0.5,
-        monthly_length_scale=2.0,
-        monthly_signal_variance=1.0,
-        annual_length_scale=50,
-        annual_signal_variance=2.0,
-        noise_variance=0.25,
-    )
-
-    # Optimize hyperparameters using gradient ascent.
-    gp.optimize_hyperparameters(X_train, y_train, num_iters=100, learning_rate=1e-2)
-    print("Optimized hyperparameters:")
-    print(f"  trend_length_scale: {gp.trend_length_scale:.3f}")
-    print(f"  trend_signal_variance: {gp.trend_signal_variance:.3f}")
-    print(f"  noise_variance: {gp.noise_variance:.3f}")
-
-    # Fit the GP with the optimized hyperparameters.
-    gp.fit(X_train, y_train)
-    X_test = np.arange(0, 365, 1).reshape(-1, 1)
-    mean, variance = gp.predict(X_test)
-    print("Predicted mean (first 5):\n", mean[:5])
-    print("Predicted variance (first 5):\n", variance[:5])
+        return best_lml

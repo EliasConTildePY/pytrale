@@ -54,7 +54,7 @@ def test_recovers_the_hyperparameters_of_a_simulated_trajectory():
     diffusion, sigma_eps = 2e-4, 0.8
     times, weights, _ = _simulated_series(diffusion=diffusion, sigma_eps=sigma_eps)
 
-    model = SmoothTrend(huber_c=None).fit(times, weights)
+    model = SmoothTrend(robust_c=None).fit(times, weights)
 
     assert model.lam_ == pytest.approx(diffusion / sigma_eps**2, rel=0.5)
     assert model.sigma_eps_ == pytest.approx(sigma_eps, rel=0.1)
@@ -64,14 +64,14 @@ def test_recovers_the_hyperparameters_of_a_simulated_trajectory():
 def test_smoothed_curve_tracks_the_latent_level():
     times, weights, levels = _simulated_series()
 
-    predicted = SmoothTrend(huber_c=None).fit(times, weights).predict(times)
+    predicted = SmoothTrend(robust_c=None).fit(times, weights).predict(times)
 
     assert np.sqrt(np.mean((predicted - levels) ** 2)) < 0.3
 
 
 def test_smoothed_state_matches_the_filter_at_the_last_time():
     times, weights = _sparse_series()
-    model = SmoothTrend(huber_c=None).fit(times, weights)
+    model = SmoothTrend(robust_c=None).fit(times, weights)
     posterior = model.smooth(times)
 
     noise_variance = model.sigma_eps_**2
@@ -82,7 +82,7 @@ def test_smoothed_state_matches_the_filter_at_the_last_time():
         noise_variance=noise_variance,
         diffusion=noise_variance * model.lam_,
         trend_prior_variance=model.trend_prior_variance,
-        huber_c=None,
+        robust_c=None,
     )
 
     assert posterior.mean[-1] == pytest.approx(filtered.mu[-1])
@@ -95,8 +95,11 @@ def test_negligible_observation_noise_makes_the_curve_interpolate():
     times, weights = _sparse_series()
     sigma_eps, diffusion = 1e-3, 1e-2
 
-    # Gating has to be off: at this noise level every reading is an outlier.
-    model = SmoothTrend(lam=diffusion / sigma_eps**2, sigma_eps=sigma_eps, huber_c=None)
+    # Reweighting has to be off: at this noise level every reading looks
+    # like an outlier and would be discounted.
+    model = SmoothTrend(
+        lam=diffusion / sigma_eps**2, sigma_eps=sigma_eps, robust_c=None
+    )
 
     predicted = model.fit(times, weights).predict(times)
 
@@ -140,14 +143,14 @@ def test_uncertainty_widens_in_gaps_and_beyond_the_data():
     assert std[1] < std[2]
 
 
-def test_huber_gating_limits_the_pull_of_an_outlier():
+def test_robust_reweighting_limits_the_pull_of_an_outlier():
     times, weights = _sparse_series()
     contaminated = weights.copy()
     contaminated[30] += 3.0
 
-    clean = SmoothTrend(huber_c=None).fit(times, weights).predict(times)
-    gaussian = SmoothTrend(huber_c=None).fit(times, contaminated).predict(times)
-    gated = SmoothTrend(huber_c=2.5).fit(times, contaminated).predict(times)
+    clean = SmoothTrend(robust_c=None).fit(times, weights).predict(times)
+    gaussian = SmoothTrend(robust_c=None).fit(times, contaminated).predict(times)
+    gated = SmoothTrend(robust_c=2.5).fit(times, contaminated).predict(times)
 
     assert np.abs(gated - clean).max() < 0.5 * np.abs(gaussian - clean).max()
 
@@ -259,3 +262,14 @@ def test_works_through_trale():
 
     assert db.weights_predicted.shape == db.times.shape
     assert np.all(np.isfinite(db.weights_predicted))
+
+
+def test_noiseless_data_does_not_produce_undefined_hyperparameters():
+    """An exactly linear series drives the residual sum to zero."""
+    times = np.arange(40.0)
+
+    model = SmoothTrend().fit(times, 80.0 + 0.01 * times)
+
+    assert np.isfinite(model.lam_)
+    assert model.sigma_eps_ > 0.0
+    assert np.all(np.isfinite(model.smooth(times).std))

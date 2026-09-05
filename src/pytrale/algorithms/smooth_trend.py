@@ -64,7 +64,7 @@ def _filter_forward(
     noise_variance: float,
     diffusion: float,
     trend_prior_variance: float,
-    huber_c: float | None,
+    robust_c: float | None,
 ) -> _FilterOutput:
     """Run the Kalman filter of the smooth-trend model over sorted times.
 
@@ -83,8 +83,8 @@ def _filter_forward(
         diffusion (float): Rate diffusion `q` [kg²/day³] scaling `Q(dt)`.
         trend_prior_variance (float): Prior variance of the initial rate,
             in units of `noise_variance` [day⁻²].
-        huber_c (float | None): Gating threshold in standard deviations, or
-            None to disable gating.
+        robust_c (float | None): Reweighting threshold in standard
+            deviations, or None for a plain Gaussian filter.
 
     Returns:
         _FilterOutput: Filtered and predicted moments at every index, plus
@@ -149,15 +149,15 @@ def _filter_forward(
             s = p11_pred + noise_variance
 
             # The likelihood must stay that of the plain Gaussian model, so
-            # it is accumulated before any gating widens `R`.
+            # it is accumulated before any reweighting widens `R`.
             sum_sq += delta * delta / s
             sum_log_s += math.log(s)
             n_used += 1
 
-            if huber_c is not None:
+            if robust_c is not None:
                 z = abs(delta) / math.sqrt(s)
-                if z > huber_c:
-                    s = p11_pred + noise_variance * (z / huber_c) ** 2
+                if z > robust_c:
+                    s = p11_pred + noise_variance * (z / robust_c) ** 2
 
             k1 = p11_pred / s
             k2 = p12_pred / s
@@ -343,9 +343,12 @@ def _concentrated_objective(
         noise_variance=1.0,
         diffusion=lam,
         trend_prior_variance=trend_prior_variance,
-        huber_c=None,
+        robust_c=None,
     )
-    return filtered.n_used * math.log(filtered.sum_sq) + filtered.sum_log_s
+    # Near-noiseless data drives the residual sum to zero; the same floor
+    # the noise estimate uses keeps the logarithm finite.
+    residual = max(filtered.sum_sq, filtered.n_used * _MIN_NOISE_VARIANCE)
+    return filtered.n_used * math.log(residual) + filtered.sum_log_s
 
 
 class SmoothTrend(Interpolator):
@@ -378,13 +381,17 @@ class SmoothTrend(Interpolator):
     gradient-based optimizer is involved, which keeps the whole algorithm
     portable to environments without one.
 
-    Robustness comes from Huber gating of the innovations (Masreliez
-    1975): an observation further than `huber_c` standard deviations from
-    the prediction has its noise variance inflated, which bounds its
-    influence instead of letting it drag the curve proportionally to its
-    error. Gating is applied only when producing the final curve; `lam`
-    and the noise scale are estimated with the plain Gaussian filter so
-    that the likelihood being maximized remains the model's own.
+    Robustness comes from reweighting the innovations: an observation
+    further than `robust_c` standard deviations from its own prediction
+    has its noise variance inflated by `(z / robust_c)**2`. That is one
+    IRLS step of a Student-t observation likelihood with
+    `robust_c**2 - 1` degrees of freedom (Lange, Little & Taylor 1989;
+    Nickisch, Solin & Grigorievskiy 2018), so the influence of a gross
+    error redescends towards zero rather than merely being bounded as it
+    would be under Huber weighting. Reweighting is applied only when
+    producing the final curve; `lam` and the noise scale are estimated
+    with the plain Gaussian filter, so the likelihood being maximized
+    remains the model's own.
 
     Attributes:
         lam_ (float | None): Fitted smoothness `lam = q / sigma_eps²`
@@ -400,7 +407,7 @@ class SmoothTrend(Interpolator):
         self,
         lam: float | None = None,
         sigma_eps: float | None = None,
-        huber_c: float | None = 2.5,
+        robust_c: float | None = 2.5,
         lam_grid_size: int = 40,
         lam_log10_range: tuple[float, float] = (-8.0, -2.0),
         trend_prior_variance: float = 0.035,
@@ -414,8 +421,10 @@ class SmoothTrend(Interpolator):
                 equivalent kernel bandwidth `h` [days] as `lam = h ** -4`.
             sigma_eps (float | None): Observation noise standard deviation
                 [kg]. None estimates it in closed form.
-            huber_c (float | None): Innovation gating threshold in standard
-                deviations. None disables gating, giving a plain Gaussian
+            robust_c (float | None): Innovation reweighting threshold in
+                standard deviations, equivalent to a Student-t observation
+                likelihood with `robust_c ** 2 - 1` degrees of freedom
+                (about 5.3 at the default). None gives a plain Gaussian
                 filter.
             lam_grid_size (int): Number of points in the logarithmic `lam`
                 grid searched during fitting.
@@ -435,7 +444,7 @@ class SmoothTrend(Interpolator):
         """
         self.lam = lam
         self.sigma_eps = sigma_eps
-        self.huber_c = huber_c
+        self.robust_c = robust_c
         self.lam_grid_size = lam_grid_size
         self.lam_log10_range = lam_log10_range
         self.trend_prior_variance = trend_prior_variance
@@ -455,8 +464,8 @@ class SmoothTrend(Interpolator):
         Repeated measurements at the same time need no special treatment:
         they enter as consecutive update steps with `dt = 0`, which is the
         same posterior as averaging them with `R / k` while also giving the
-        correct joint likelihood and letting the gating reject a single bad
-        reading rather than a contaminated average.
+        correct joint likelihood and letting the reweighting discount a
+        single bad reading rather than a contaminated average.
 
         Args:
             times_measured (NDArray): 1D array of measurement times [days].
@@ -550,7 +559,7 @@ class SmoothTrend(Interpolator):
                 noise_variance=noise_variance,
                 diffusion=noise_variance * self.lam_,
                 trend_prior_variance=self.trend_prior_variance,
-                huber_c=self.huber_c,
+                robust_c=self.robust_c,
             ),
             diffusion=noise_variance * self.lam_,
             times=all_times[order],
@@ -664,7 +673,7 @@ class SmoothTrend(Interpolator):
             noise_variance=1.0,
             diffusion=lam,
             trend_prior_variance=self.trend_prior_variance,
-            huber_c=None,
+            robust_c=None,
         )
         variance = filtered.sum_sq / filtered.n_used
         return math.sqrt(max(variance, _MIN_NOISE_VARIANCE))

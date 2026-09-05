@@ -21,8 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   smoother. It is the exact Gaussian-process posterior in O(N), handles
   missing days and arbitrary query times without filling anything in,
   estimates its hyperparameters by maximum likelihood through a
-  one-dimensional grid search (no gradient-based optimizer), and bounds the
-  influence of outliers by Huber gating of the innovations. Adds
+  one-dimensional grid search (no gradient-based optimizer), and discounts
+  outliers by reweighting the innovations, which is one IRLS step of a
+  Student-t observation likelihood. Adds
   `predict_std`, `predict_trend`, `predict_trend_std` and `smooth` on top of
   the `Interpolator` interface, plus `pytrale.algorithms.SmoothTrendPosterior`.
 - `pytrale.algorithms.GaussianProcess` — moved from `pytrale.utils.gp`,

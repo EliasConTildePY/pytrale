@@ -16,6 +16,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   extracted out of `Trale` and now the default `algorithm`.
 - `pytrale.algorithms.LinearInterpolator` — a plain linear-interpolation
   baseline with edge clamping, no smoothing.
+- `pytrale.algorithms.SmoothTrend` — a smooth-trend (integrated Wiener
+  process) state-space model inferred with a Kalman filter and an RTS
+  smoother. It is the exact Gaussian-process posterior in O(N), handles
+  missing days and arbitrary query times without filling anything in,
+  estimates its hyperparameters by maximum likelihood through a
+  one-dimensional grid search (no gradient-based optimizer), and bounds the
+  influence of outliers by Huber gating of the innovations. Adds
+  `predict_std`, `predict_trend`, `predict_trend_std` and `smooth` on top of
+  the `Interpolator` interface, plus `pytrale.algorithms.SmoothTrendPosterior`.
 - `pytrale.algorithms.GaussianProcess` — moved from `pytrale.utils.gp`,
   fixed to implement `Interpolator` (`predict` returns the posterior mean;
   `predict_with_uncertainty` returns mean and variance).

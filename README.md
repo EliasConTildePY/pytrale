@@ -59,6 +59,20 @@ db = Trale(times_measured=..., weights_measured=..., algorithm=GaussianKernelSmo
 db = Trale(times_measured=..., weights_measured=..., algorithm=LinearInterpolator())
 ```
 
+```python
+from pytrale.algorithms import SmoothTrend
+
+# A state-space smoother: exact Gaussian-process posterior in O(N), with
+# hyperparameters estimated from the data and uncertainty for free.
+db = Trale(times_measured=..., weights_measured=..., algorithm=SmoothTrend())
+```
+
+`SmoothTrend` also answers questions the `Interpolator` interface itself
+cannot: `predict_std` gives a credible band that widens across gaps and
+beyond the last measurement, and `predict_trend` / `predict_trend_std` give
+the rate of change in kg/day with its uncertainty. `smooth(times)` returns
+all four at once.
+
 `GaussianProcess` (`pytrale.algorithms.GaussianProcess`) is also included, as
 a from-scratch Gaussian Process regression with a trend + weekly/monthly/
 annual periodic kernel.
